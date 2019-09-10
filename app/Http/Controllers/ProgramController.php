@@ -35,13 +35,19 @@ class ProgramController extends Controller
         $searchresults = array();
         $programs = $this->list();
         $programnames = array_pluck($programs,'programname');
-        foreach($programnames as $key => $programname){
-            if(preg_match('/'.$request->keyword.'/',$programname)){
-                array_push($searchresults ,$programs[$key]);
+        if(isset($request->keyword)){
+            foreach($programnames as $key => $programname){
+                if(preg_match('/'.$request->keyword.'/',$programname)){
+                    array_push($searchresults ,$programs[$key]);
+                }
             }
+            // 検索結果をDBに保存
+            $this->store($request->keyword);
+            // Chatworkに通知
+            $this->cwnotice($request->keyword);
+        }else{
+            return $programs;
         }
-        // 検索結果をDBに保存
-        $this->store($request->keyword);
         return $searchresults;
     }
 
@@ -57,5 +63,25 @@ class ProgramController extends Controller
     public function history(){
         return KeyWord::orderBy('id', 'desc')->get();
     }
-    // 履歴削除
+
+    // ChatWork
+    public function cwnotice($word){
+        $chatGroupId = config('cwapi.roomid');
+        $chatToken = config('cwapi.token');
+
+        $message = '[info][title]番組検索のお知らせ[/title]【'.$word.'】で番組が検索されました[/info]';
+        $headers = [
+            'X-ChatWorkToken: '.$chatToken
+        ];
+        $option = [
+            'body' => $message
+        ];
+        $ch = curl_init( 'https://api.chatwork.com/v2/rooms/'.$chatGroupId.'/messages' );
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($option));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+    }
 }
